@@ -1,0 +1,36 @@
+---
+title: "HW 10"
+output: html_notebook
+---
+
+
+Get the whole dataframe from `.csv` file.
+```{r}
+mobility_df = read.csv("2020_CZ_Region_Mobility_Report.csv")
+names(mobility_df)
+```
+
+
+Subset the dataframes for Czechia and Prague.
+```{r}
+czechia_df = mobility_df[mobility_df$sub_region_1 == "", 9]; czechia_df
+prague_df = mobility_df[mobility_df$sub_region_1 == "Prague", 9]; prague_df
+```
+
+
+Lin regression witchcraft.
+```{r}
+# czechia_df ... x axis
+# prague_df  ... y axis
+czm = mean(czechia_df)
+prm = mean(prague_df)
+a = cov(czechia_df,prague_df)/var(czechia_df); a
+b = prm - a * czm; b
+
+plot(czechia_df, prague_df, col='blue')
+lines(czechia_df, a * czechia_df + b, col='red')
+
+lmMobility = lm(prague_df ~ czechia_df)
+summary(lmMobility)
+```
+

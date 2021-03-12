@@ -1,0 +1,23 @@
+---
+title: "Untitled"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+norm_42_13 <- read.csv("normal_42_13.csv")
+norm_std <- read.csv("normal.csv")
+expo <- read.csv("exponential.csv")
+
+spread <- runif(999, min=0, max = 10)
+
+norm_42_13$spread <- spread
+norm_std$spread <- spread
+expo$spread <- spread
+
+plot(norm_std)
+plot(norm_42_13)
+plot(expo)
+```
+

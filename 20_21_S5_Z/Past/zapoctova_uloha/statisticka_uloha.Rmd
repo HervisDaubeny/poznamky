@@ -1,0 +1,466 @@
+---
+title: "Chybovost alternativně napájených tabel"
+output: html_notebook
+---
+```{r include=FALSE}
+library(tidyverse)
+library(lubridate)
+```
+
+
+## Úvod
+
+S modernizací dopravního systému přichází potřeba digitalizace. Staré papírové
+jízdní řády přestávají být *v kurzu*, protože jsou náchylné vlivům počasí,
+je nutné je pravidelně obměňovat a cestující z nich vyčtou pouze předpokládaný
+čas odjezdu.  
+Digitální sloupky jsou oproti tomu interaktivní, ukazují příjezdy včetně
+aktuálního zpoždění a změnu jízdních řádů na nich vyřešíme pouze změnou dat,
+která do nich posíláme.
+
+Obyčejné digitální sloupky používající LED displaye se *z kurzu* začínají
+vytrácet, protože přes všechna svá pozitiva spotřebovávají moc elektřiny.
+Společnost ROPID proto začala používat sloupky s technologii CHLCD.
+Tyto displaye spotřebují mnohem méně energie, protože dokáží zobrazovat odjezdy
+i když jsou vypnuté. Elektřinu potřebují pouze pro překreslení zobrazovaných
+údajů, k čemuž dochází jen jednou za minutu.  
+Aby byla úspora energie maximální experimentuje se s alternativními způsoby
+napájení a to pomocí solárních panelů a napájením z *nočního proudu* - z proudu,
+který se používá pro veřejné osvětlení a je tedy velmi levný, protože baterie
+těchto sloupků ho spotřebuje minimálně.
+
+
+## Cíl
+
+Poskytnout přehled o současné situaci. O počtu sloupků, o využití alternativního
+napájení a především o počtu chyb, které na těchto sloupcích vznikají.
+Rád bych vizualizoval, k jakému druhu chyb dochází na jakém druhu sloupků.
+Ke kolika chybám dojde v Praze a ke kolika v Příbrami. Chci zjistit, jestli
+vznik chyby závisí na čase, protože zvláště u solárně napájených sloupků 
+se taková věc dá předpokládat. Nakonec se podívám na chování naměřených teplot
+na sloupcích.
+
+## Přehled
+
+V první řadě bych rád uvedl nějaké údaje.
+
+```{r include=F}
+# load tableau definitions
+tabs <- read.csv("panely.csv", TRUE, sep = "\t")
+
+# match tabs from Prague & Pribram
+prg_mask <- grepl("rop", tabs[["table_id"]])
+pbr_mask <- grepl("pbr", tabs[["table_id"]])
+
+# determine tab location from table_id
+loc <- vector(mode = "character", length = length(tabs[["table_id"]]))
+for (i in 1:length(prg_mask)) {
+  if (prg_mask[i] == T) {
+    loc[i] <- "Praha"
+  }
+  if (pbr_mask[i] == T) {
+    loc[i] <- "Pribram"
+  }
+}
+
+# add column, filter Kolin and testing tabs 
+tabs$location=loc
+tabs <- subset(tabs, location != "")
+tabs <- subset(tabs, supply > 0)
+
+all_count <- length(tabs$table_id)
+sol_count <- length(filter(tabs, supply == 3)$table_id)
+nig_count <- length(filter(tabs, supply == 2)$table_id)
+```
+
+```{r}
+# Celkový počet sloupků
+all_count
+
+# Počet sloupků se solárním napájením
+sol_count
+
+# Počet sloupků s nočním napájením
+nig_count
+```
+
+Nyní pro přehled uvedu graf, který znázorňuje rozdělení sloupků
+mezi Prahu a Příbram a zároveň jejich napájení. Dále se už budeme zabývat jen
+tably s alternativním napájením.
+
+```{r}
+pl_dist <- ggplot(data = tabs) + geom_bar(mapping = aes(x = location, fill = factor(supply)), position = "dodge")
+pl_dist + labs(title = "Rozdělení CHLCD tabel", fill = "napájení",
+               x = "město", y = "počet")+
+  scale_y_discrete(limits = factor(1:10))
+```
+```{r}
+# Supply = 1 ... trvalé napájení
+# Supply = 2 ... noční napájení
+# Supply = 3 ... solární napájení
+```
+
+
+## Jak jsou sloupky vlastně spolehlivé?
+
+Mým původním záměrem bylo ukázat chyby rozdělené do měsíců a následně
+se jimy zabývat dále. Jak ale ukáže následující graf, není to tak jednoduché.
+
+```{r include=F}
+# load data
+data <- read.csv("data.csv", TRUE, sep = "\t")
+tabs <- subset(tabs, supply > 1)
+
+data_count <- length(data$table_id)
+err_count <- 0
+
+# filter data only to contain logs from tabs with alternative supply
+data <- data[data$table_id %in% tabs[["table_id"]],]
+error <- vector(mode = "numeric")
+
+err_data <- data %>%
+  filter(TemperatureIn > min(tabs$max_temperature) |
+         Power < max(tabs$min_power))
+
+for (d in 1:nrow(err_data)) {
+  e <- 0
+  id <- err_data[d, "table_id"]
+  temp <- err_data[d, "TemperatureIn"]
+  volt <- err_data[d, "Power"]
+  param <- subset(tabs, table_id == id)
+  
+  # check for temperature error
+  if (temp + param["delta_t"] > param["max_temperature"]) {
+    e <- 1
+  }
+  
+  # check for voltage error
+  if (volt + param["delta_v"] < param["min_power"]) {
+    if (e > 0) {
+      e <- 3
+    }
+    else {
+      e <- 2
+    }
+  }
+  
+  error <- append(error, e)
+}
+
+# add error column and forget errorless entries
+err_data$Error <- error
+err_data <- filter(err_data, err_data$Error > 0)
+
+err_count <- length(err_data$table_id)
+```
+
+```{r}
+# draw a histogram
+ggplot(data = err_data) +
+  geom_bar(mapping = aes(x = factor(format(as.Date(time),"%m/%y")),
+                         fill = factor(Error)), position = "dodge") +
+  labs(x = "měsíc", y = "počet chyb", title = "Rozdělení chyb",
+       fill = "druh chyby")
+```
+```{r}
+# chyba = 2 ... příliš nízké napětí
+```
+
+```{r}
+# Celkový počet záznamů
+data_count
+
+# Celkový počet chyb
+err_count
+
+# Počet chyb vyjádřený vůči počtu záznamů
+err_count/data_count
+```
+
+Na 92 chybách bych moc zajímavostí neukázal. Dovolím si tedy uměle poupravit
+definice tabel. Limitní hodnoty posunu o 10%, což nám dá hezký náhled na to,
+jak přesně jsou původní limity nastaveny. Zároveň z toho můžeme vyčíst,
+jak často se tabla blíží k chybě, ale nakonec k ní nedojde. Rozdělení chyb
+potom vypadá následovně:
+
+```{r include=F}
+# load tableau definitions
+tabs_10 <- read.csv("panely_10%.csv", TRUE, sep = "\t")
+
+# determine tab location from table_id
+loc <- vector(mode = "character", length = length(tabs_10$table_id))
+for (i in 1:length(prg_mask)) {
+  if (prg_mask[i] == T) {
+    loc[i] <- "Praha"
+  }
+  if (pbr_mask[i] == T) {
+    loc[i] <- "Pribram"
+  }
+}
+
+# add column, filter Kolin and testing tabs 
+tabs_10$location=loc
+tabs_10 <- subset(tabs_10, location != "")
+tabs_10 <- subset(tabs_10, supply > 1)
+
+err_count <- 0
+error <- vector(mode = "numeric")
+
+data_10 <- data %>%
+  filter(TemperatureIn > min(tabs_10$max_temperature) |
+         Power < max(tabs_10$min_power))
+
+for (d in 1:nrow(data_10)) {
+  e <- 0
+  id <- data_10[d, "table_id"]
+  temp <- data_10[d, "TemperatureIn"]
+  volt <- data_10[d, "Power"]
+  param <- subset(tabs_10, table_id == id)
+  
+  # check for temperature error
+  if (temp + param["delta_t"] > param["max_temperature"]) {
+    e <- 1
+  }
+  
+  # check for voltage error
+  if (volt + param["delta_v"] < param["min_power"]) {
+    if (e > 0) {
+      e <- 3
+    }
+    else {
+      e <- 2
+    }
+  }
+  
+  error <- append(error, e)
+}
+
+# add error column and forget errorless entries
+data_10$Error <- error
+data_10 <- filter(data_10, data_10$Error > 0)
+
+err_count <- length(data_10$table_id)
+```
+
+```{r}
+# draw a histogram
+ggplot(data = data_10) +
+  geom_bar(mapping = aes(x = factor(format(as.Date(time),"%m/%y")),
+                         fill = factor(Error)), position = "dodge") +
+  labs(x = "měsíc", y = "počet chyb", fill = "druh chyby",
+       title = "Rozdělení chyb s posunutými parametry")
+```
+
+```{r}
+# chyba = 1 ... příliš vysoká teplota
+# chyba = 2 ... příliš nízké napětí
+```
+
+```{r}
+# Celkový počet chyb
+err_count
+
+# Podíl chyb
+err_count/data_count
+```
+
+Všimněme si, že snížení teplotního limitu o `~5°` má na počet chyb velmi malý
+vliv, zatímco zvýšení minimálního napětí o `~1.1V` se projeví hodně.
+
+
+## Práce s chybami
+
+Nyní přistoupíme ke zpracování chyb.
+
+### Závislost chyb na čase
+
+```{r}
+# group all errors in one day, so the histogram will work as intended
+data_10$hm <- as.POSIXct(paste0("2020-01-01 ",
+            (str_extract(data_10$time, "..:..:.."))))
+
+# draw the histogram
+hist(x = data_10$hm,
+     breaks = "hours",
+     freq = T,
+     main = "Rozdělení chyb vzhledem k času",
+     xlab = "čas",
+     ylab = "počet chyb za poslední hodinu")
+```
+
+Histogram napovídá, že větší četnost chyb máme v noci, pozdě večer a hlavně
+brzy ráno. Zajímá nás tedy, zda jsou cyby opravdu závislé na čase.
+
+```{r}
+hours <- sprintf("2020-1-1 %d:00", seq(0,24))
+halfs <- sprintf("2020-1-1 %d:30", seq(0,23))
+lims <- c()
+time <- c()
+for (i in 1:24) {
+  lims <- append(lims, hours[i])
+  lims <- append(lims, halfs[i])
+}
+time <- lims
+lims <-append(lims, hours[25])
+errors <- c(1:48)
+
+for (i in 1:48) {
+  from <- as.POSIXct(lims[i])
+  to <- as.POSIXct(lims[i+1])
+  errors[i] <- length(filter(data_10, hm >= from & hm <= to)$table_id)
+}
+
+for (i in 1:48) {
+  time[i] <- hour(time[i]) + minute(time[i]) / 60
+}
+time_num <- as.numeric(time)
+
+relation <- lm(errors~time_num)
+summary(relation)
+
+plot(x = time_num, y = errors, col = "blue", abline(relation, col = "red"),
+     main = "Lineární regrese",
+     xlab = "čas",
+     ylab = "počet chyb za posledních 30 min")
+```
+
+`p-value = 0.00146 < 0.05` Test pomocí lineární regrese nám tedy potvrdil
+závislost dat, ale zároveň bychom neměli zapomínat, že se nejedná o nejlepší
+možnou aproximaci. Vzhledem ke tvaru, který by měla křivka proložená daty,
+bychom lepší aproximace dosáhli npř. pomocí vhodně posunuté fce `sin(x)`.
+(Podobně jako v následujícím grafu.)
+
+```{r}
+plot(time_num, 23*sin(0.25*time_num+26)+40, type = "l", col = "red",
+     ylim = range(10:80),
+     main = "Můj pokus o aproximaci pomocí sinu",
+     xlab = "čas",
+     ylab = "počet chyb za posledních 30 min")
+points(time_num, errors, col = "blue")
+```
+
+```{r include=F}
+location <- c()
+supply <- c()
+for (i in 1:length(data_10$table_id)) {
+  id <- data_10$table_id[i]
+  param <- subset(tabs_10, table_id == id)
+
+  location <- append(location, param$location)
+  supply <- append(supply, param$supply)
+}
+
+data_10$location <- location
+data_10$supply <- supply
+```
+
+### Rozdělení chyb vzhledem k napájení
+
+Omlouvám se, ale u tohoto grafu nemůžu nastavit název, protože jeho přidání
+zmenší vykreslenou oblast a přestanou se zobrazovat chyby typu 1, kterých je
+opravdu málo (v součtu 2).
+
+```{r}
+err_sup_dist <- ggplot(data = data_10) +
+  geom_bar(mapping = aes(x = as.character(supply), fill = factor(Error)),
+  position = "dodge")
+err_sup_dist + labs(fill = "druh chyby", x = "napájení", y = "počet")
+```
+```{r}
+# chyba = 1 ... příliš vysoká teplota
+# chyba = 2 ... příliš nízké napětí
+```
+
+### Rozdělení chyb vzhledem k umístění sloupku
+
+```{r include=F}
+err_loc_err_dist <- ggplot(data = data_10) +
+  geom_bar(mapping = aes(x = location, fill = factor(Error)),
+  position = "dodge")
+err_loc_sup_dist <- ggplot(data = data_10) +
+  geom_bar(mapping = aes(x = location, fill = factor(supply)),
+  position = "dodge")
+```
+
+
+```{r}
+par(mfrow = c(1,2))
+err_loc_err_dist + labs(title = "Rozdělení chyb do měst podle druhu chyby",
+                        fill = "druh chyby", x = "město", y = "počet chyb")
+# chyba = 1 ... vysoká teplota
+# chyba = 2 ... nízké napětí
+
+err_loc_sup_dist + labs(title = "Rozdělení chyb do měst podle napájení porouchaného sloupku",
+                        fill = "napájení", x = "město", y = "počet chyb")
+# napájení = 2 ... noční proud
+# napájení = 3 ... solární
+```
+
+### Závěr
+
+```
+graf 1 = Rozdělení chyb vzhledem k času
+graf 2 = Lineární regrese
+graf 3 = Rozdělení chyb vzhledem k napájení
+graf 4 = Rozdělení chyb do měst podle druhu chyby
+graf 5 = Rozdělení chyb do měst podle napájení porouchaného sloupku
+```
+
+Když se podíváme na `1.` graf, můžeme říci následující.  
+Výskyt chyby závisí na čase. Nejvíce chyb nastává hluboko v noci nebo brzy ráno,
+což je doba, kdy solárně napájeným tablům dochází baterka. Nočně napájená tabla
+se v tu dobu naopak nabíjejí a k nízkému napětí by na nich tedy docházet nemělo.
+
+Tomu odpovídá i `3.` graf, ze kterého vyčteme, že většina chyb nízkého napětí
+nastává na solárně nabíjených sloupcích. Znovu si také můžeme všimnou
+k jak malému množství chyb vysoké teploty dochází.
+
+K posledním dvěma grafům bych rád připomněl jiný hned z přehledu, ve kterém jsem
+ukázal, rozdělení solárních a nočních sloupků mezi Prahu a Příbram.  
+```
+Praha: 2 solární, 5 nočních
+Příbram: 6 solárních, 9 nočních
+
+```
+
+Ze `4.` grafu vidíme, že v Příbrami došlo k mnohem více chybám v napětí,
+než v Praze. Dejme to do souvislosti s grafem `3.` a uvědomme si, že většina
+chyb v napětí pochází ze solárně napájených tabel. Nyní bychom si mohli říct,
+že v Příbrami je o 4 solárně napájená tabla víc a že proto je tam o tolik víc
+chyb v napětí.  
+Graf `5.` ale tento mylný předpoklad vyvrací, protože jak můžeme vidět,
+většina chyb, které vznikly na území Prahy a o nichž už víme, že jsou převážně
+způsobeny nízkým napětím, nastala na tablech s nočním napájením.
+
+### Shrnutí k chybám
+
+Jak můžeme vidět ze všech předchozích dat, u solárně napájených sloupků je
+riziko vzniku chyby výrazně větší než u těch napájených nočně.
+
+Právě proto bychom měli ocenit jejich konstrukci a velmi dobré nastavení limitů,
+které naprostou většinu těchto chyb nedopustí, jak jsme ostatně viděli v části
+[Jak jsou sloupky vlastně spolehlivé?].
+
+
+## Rozdělení naměřených teplot
+
+Když jsem zkoumal data o teplotách napadlo mě, jestli náhodou nemají normální
+rozdělení. Přecejen na přednášce jsem si říkali že spousta věcí v přírodě
+má normální rozdělení, tak proč ne teplota.
+Abych si mohl tuhle teorii ověřit chyběl mi už jen odhad průměrné teploty.
+
+Ze [stránek českého hydrometeorologického ústavu](https://www.chmi.cz/historicka-data/pocasi/uzemni-teploty#)
+jsem vzal průměrnou teplotu v Praze a Středočeském kraji za rok 2020. `μ = 9.9°C`
+
+```{r}
+hist(data[["TemperatureIn"]], breaks = 100,
+     main = "Histogram naměřených teplot",
+     xlab = "teploty",
+     ylab = "frekvence")
+t.test(x = data[["TemperatureIn"]], mu = 9.9)
+```
+
+`p-value < 0.05` Platí tedy alternativní hypotéza, že když se na data díváme
+jako na normálně rozdělenou náhodnou veličinu, její střední hodnota není 9.9°C.
+Místo toho jsme se dozvěděli, že s pravděpodobností 95% se střední hodnota
+našeho normálního rozdělení náchází na intervalu `(11.45°C, 11.53°C)`

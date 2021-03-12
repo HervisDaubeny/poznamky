@@ -1,0 +1,35 @@
+table_id	alias	delta_v	delta_t	max_temperature	min_power	supply
+kol1	Spel - test Kolín	0	0	47	116	0
+kol2	Kolín,Banka A - epapír Spel	0	0	47	116	0
+kol3	Kolín,Banka B - epapír Spel	0	0	47	116	0
+pbr01	Příbram, Čs. armády (Ryneček - směr Zdaboř)	0	0	47	116	3
+pbr02	Příbram, Dolejší Obora (u autobusového nádraží)	0	0	47	116	2
+pbr03	Příbram, aut.nádr. (zastávka MHD spodní část AN)	0	0	47	116	2
+pbr04	Příbram, Milínská (OC Skalka)	0	0	47	116	3
+pbr05	Příbram, Milínská (Okresní soud)	0	0	47	116	2
+pbr06	Příbram, sídl. nám. 17.listopadu	0	0	47	116	2
+pbr07	Příbram, sídl. Pol.vězňů věžák (náměstí 17.listopadu)	0	0	47	116	2
+pbr08	Příbram, Stadion Horymír (směr Praha)	0	0	47	116	3
+pbr09	Příbram, Školní III.poliklinika (RAVAK)	0	0	47	116	3
+pbr10	Příbram, Školní III.poliklinika (OXYGEN)	0	0	47	116	2
+pbr11	Příbram, Drkolnov,Podbrdská (směr Svatá Hora)	0	0	47	116	3
+pbr12	Příbram, Nová Hospoda (směr město)	0	0	47	116	2
+pbr13	Příbram, Zdaboř, Nem. (vrátnice ZÚNZ směr SH)	0	0	47	116	2
+pbr14	Příbram, Zdaboř, Žežická (směr Jiráskovy sady)	0	0	47	116	3
+pbr15	Příbram, Škol. kruhový objezd (směr Jiráskovy sady)	0	0	47	116	2
+pbr16	Příbram,Jiráskovy sady (směr TGM) - LED	0	0	47	116	1
+pbr17	Příbram,Jiráskovy sady (směr z centra) - LED	0	0	47	116	1
+pbr18	Příbram, sídl. II.poliklinika (směr nám 17. list.) - LED	0	0	47	116	1
+pbr19	Příbram, sídl. II.poliklinika (směr Svatá Hora) - LED	0	0	47	116	1
+rop1	StrossB	-3	0	52	116	2
+rop10	Apex - epapír Visionect	0	0	47	116	0
+rop11	ROPID - epapír Papercast	0	0	47	116	1
+rop12	cvut_fd	0	0	47	116	0
+rop2	ROPID novy	10	0	66	116	1
+rop3	StrossA	-4	0	52	116	2
+rop4	StrossD	0	0	52	116	2
+rop5	StrossE	-4	0	52	116	2
+rop6	ROPID pbr	-3	0	52	118	1
+rop7	Rudná - epapír Visionect	0	0	47	116	2
+rop8	Zbraslav	-4	-10	47	116	3
+rop9	ROPID - epapír Apex	0	0	47	116	3

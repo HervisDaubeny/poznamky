@@ -17,7 +17,8 @@
 20_21_S5_Z/Grafika_I/animation/
 20_21_S5_Z/OSY
 
-.Rproj.user
+*.Rproj.user
+*.png
 
 # User-specific files
 
